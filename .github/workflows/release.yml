@@ -39,24 +39,24 @@ jobs:
           cd XrayCore
           gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
 
-      - name: Patch Repositories (Fix 403 error)
+      - name: Patch settings.gradle.kts (Fix 403 Forbidden)
         run: |
-          # Этот шаг принудительно добавляет надежные зеркала, если основные лежат
-          sed -i 's/mavenCentral()/mavenCentral(); maven { url "https:\/\/repo.maven.apache.org\/maven2\/" }/g' settings.gradle.kts
-          # Или просто принудительно используем Google зеркала для стабильности
-          sed -i 's/google()/google(); maven { url "https:\/\/maven.google.com" }/g' settings.gradle.kts
+          # Заменяем стандартный вызов mavenCentral() на прямое использование зеркала repo1.maven.org
+          # Это решает проблему 403 Forbidden от apache.org
+          sed -i 's/mavenCentral()/maven { url = uri("https:\/\/repo1.maven.org\/maven2\/") }/g' settings.gradle.kts
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
         run: |
-          # Запускаем сборку с агрессивными настройками повторов
+          # Используем флаги для игнорирования битых кешей и бесконечных попыток
           ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a,armeabi-v7a" \
             --no-daemon \
             --stacktrace \
+            --refresh-dependencies \
             -Dorg.gradle.internal.http.socketTimeout=300000 \
             -Dorg.gradle.internal.http.connectionTimeout=300000 \
             -Dorg.gradle.internal.repository.max.retries=20 \
