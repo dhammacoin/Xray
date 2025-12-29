@@ -32,7 +32,9 @@ jobs:
       # 4. Setup Android NDK
       - name: Setup Android NDK
         run: |
+          # Установка конкретной версии NDK (r28), как в проекте
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
+          # Настройка переменных окружения
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
           echo "$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_PATH
 
@@ -45,11 +47,10 @@ jobs:
           
           mkdir -p app/libs
           cd XrayCore
-          # Собираем библиотеку с указанием пакета для корректного импорта в Kotlin
-          gomobile bind -v -androidapi 26 -target=android \
-            -javapkg=io.github.saeeddev94.xray.core \
-            -o ../app/libs/XrayCore.aar .
+          # Собираем БЕЗ -javapkg, чтобы импорт в Kotlin (import XrayCore) работал
+          gomobile bind -v -androidapi 26 -target=android -o ../app/libs/XrayCore.aar .
           
+          # Проверка наличия файла
           ls -l ../app/libs/XrayCore.aar
 
       # 6. Patch settings.gradle.kts (Fix 403 Forbidden)
@@ -66,18 +67,20 @@ jobs:
       # 8. Build with Gradle
       - name: Build with Gradle
         run: |
+          # Используем параллельную сборку и таймауты для стабильности
           ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a" \
             --no-daemon \
+            --parallel \
+            --max-workers=2 \
             --stacktrace \
             --refresh-dependencies \
             -Dorg.gradle.internal.http.socketTimeout=300000 \
             -Dorg.gradle.internal.http.connectionTimeout=300000 \
-            -Dorg.gradle.internal.repository.max.retries=20 \
-            -Dorg.gradle.internal.repository.max.tenacity=20
+            -Dorg.gradle.internal.repository.max.retries=20
 
-      # 9. Upload AAR Library (Добавлено: теперь выгружаем библиотеку отдельно)
+      # 9. Upload XrayCore AAR (Отдельно библиотека)
       - name: Upload XrayCore AAR
         if: success()
         uses: actions/upload-artifact@v4
