@@ -8,93 +8,65 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      # ------------------------------
-      # 1. Checkout code
-      # ------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # ------------------------------
-      # 2. Set up Go
-      # ------------------------------
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.23' 
 
-      # ------------------------------
-      # 3. Set up JDK 17
-      # ------------------------------
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ------------------------------
-      # 4. Setup Android NDK
-      # ------------------------------
       - name: Setup Android NDK
         run: |
+          # Устанавливаем NDK r28, как указано в твоем build.gradle.kts
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
-      # ------------------------------
-      # 5. Build XrayCore AAR
-      # ------------------------------
       - name: Build XrayCore AAR
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH=$PATH:$(go env GOPATH)/bin
           gomobile init
+          
+          # Создаем папку libs, если её нет
           mkdir -p app/libs
+          
+          # Собираем ядро. 
+          # Мы НЕ указываем -javapkg, чтобы gomobile создал стандартный импорт XrayCore,
+          # который ожидают твои файлы MainActivity.kt и другие.
           cd XrayCore
-          gomobile bind -v -androidapi 26 -target=android \
-            -javapkg=io.github.saeeddev94.xray.core \
-            -o ../app/libs/XrayCore.aar .
+          gomobile bind -v -androidapi 26 -target=android -o ../app/libs/XrayCore.aar .
+          
+          # Проверяем, что файл создался (для логов)
+          ls -l ../app/libs/
 
-      # ------------------------------
-      # 6. Patch settings.gradle.kts (Fix 403 Forbidden)
-      # ------------------------------
-      - name: Patch settings.gradle.kts (Fix 403 Forbidden)
-        run: |
-          if [ -f settings.gradle.kts ]; then
-            cp settings.gradle.kts settings.gradle.kts.bak
-            sed -i 's/mavenCentral()/maven { url = uri("https:\/\/repo1.maven.org\/maven2\/") }/g' settings.gradle.kts
-          fi
-
-      # ------------------------------
-      # 7. Grant execute permission for gradlew
-      # ------------------------------
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ------------------------------
-      # 8. Build with Gradle
-      # ------------------------------
       - name: Build with Gradle
         run: |
+          # Собираем APK. 
+          # Передаем abiId и abiTarget (обязательно для твоего проекта).
+          # Добавляем --refresh-dependencies, чтобы Gradle увидел свежий XrayCore.aar
           ./gradlew assembleDebug \
             -PabiId=0 \
-            -PabiTarget="arm64-v8a,armeabi-v7a" \
+            -PabiTarget="arm64-v8a" \
             --no-daemon \
             --stacktrace \
-            --refresh-dependencies \
-            -Dorg.gradle.internal.http.socketTimeout=300000 \
-            -Dorg.gradle.internal.http.connectionTimeout=300000 \
-            -Dorg.gradle.internal.repository.max.retries=20 \
-            -Dorg.gradle.internal.repository.max.tenacity=20
+            --refresh-dependencies
 
-      # ------------------------------
-      # 9. Upload APK
-      # ------------------------------
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: xray-debug-apk
           path: app/build/outputs/apk/debug/*.apk
