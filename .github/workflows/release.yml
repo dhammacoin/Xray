@@ -26,41 +26,54 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Install Gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
       - name: Setup Android NDK
         run: |
-          # Устанавливаем стабильную версию NDK 25
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
-          # Экспортируем пути в системные переменные GitHub
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
-          echo "NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+          # Устанавливаем NDK, указанный в твоем build.gradle.kts (r28)
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
-      - name: Build XrayCore (Go)
+      - name: Build XrayCore AAR (Directly)
         run: |
-          # Принудительно задаем пути для текущего процесса сборки
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+          # Устанавливаем gomobile
+          go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH=$PATH:$(go env GOPATH)/bin
-          
-          # Инициализируем gomobile
           gomobile init
           
-          # Даем права и запускаем сборку ядра
-          chmod +x buildGo.sh
-          ./buildGo.sh
+          # Создаем папку для библиотеки
+          mkdir -p app/libs
+          
+          # Собираем ядро напрямую, минуя buildGo.sh
+          # Параметр -javapkg должен соответствовать названию пакета в проекте
+          cd XrayCore
+          gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
+
+      - name: Prepare Signing Key
+        run: |
+          # Если у тебя есть секрет KS_FILE (Base64), он создаст файл для подписи
+          if [ -n "${{ secrets.KS_FILE }}" ]; then
+            echo "${{ secrets.KS_FILE }}" | base64 -d > /tmp/xray.jks
+          else
+            # Создаем пустой файл, чтобы gradle не падал, если ты просто тестируешь
+            touch /tmp/xray.jks
+          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        # Добавляем флаг, чтобы не падать на проверках оформления (lint)
-        run: ./gradlew assembleDebug -x lint --stacktrace
+        env:
+          KS_PASSWORD: ${{ secrets.KS_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # Передаем параметры из твоего build.gradle.kts
+          ./gradlew assembleRelease \
+            -PabiId=0 \
+            -PabiTarget="arm64-v8a,armeabi-v7a" \
+            --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: xray-release-apks
+          path: app/build/outputs/apk/release/*.apk
