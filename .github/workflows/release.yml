@@ -28,32 +28,29 @@ jobs:
 
       - name: Setup Android NDK
         run: |
-          # Устанавливаем NDK, указанный в твоем build.gradle.kts (r28)
+          # Устанавливаем NDK r28, который прописан в твоем проекте
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
-      - name: Build XrayCore AAR (Directly)
+      - name: Build XrayCore AAR
         run: |
-          # Устанавливаем gomobile
+          # Устанавливаем gomobile для создания Android-библиотеки
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH=$PATH:$(go env GOPATH)/bin
           gomobile init
           
-          # Создаем папку для библиотеки
+          # Создаем папку libs и собираем ядро напрямую
           mkdir -p app/libs
-          
-          # Собираем ядро напрямую, минуя buildGo.sh
-          # Параметр -javapkg должен соответствовать названию пакета в проекте
           cd XrayCore
+          # Собираем AAR для основных архитектур
           gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
 
       - name: Prepare Signing Key
         run: |
-          # Если у тебя есть секрет KS_FILE (Base64), он создаст файл для подписи
+          # Декодируем ключ для подписи (если он добавлен в Secrets)
           if [ -n "${{ secrets.KS_FILE }}" ]; then
             echo "${{ secrets.KS_FILE }}" | base64 -d > /tmp/xray.jks
           else
-            # Создаем пустой файл, чтобы gradle не падал, если ты просто тестируешь
             touch /tmp/xray.jks
           fi
 
@@ -66,7 +63,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          # Передаем параметры из твоего build.gradle.kts
+          # Передаем обязательные параметры abiId и abiTarget в Gradle
           ./gradlew assembleRelease \
             -PabiId=0 \
             -PabiTarget="arm64-v8a,armeabi-v7a" \
