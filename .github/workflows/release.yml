@@ -28,43 +28,31 @@ jobs:
 
       - name: Setup Android NDK
         run: |
-          # Устанавливаем NDK r28, который прописан в твоем проекте
+          # Устанавливаем NDK версии 28, как указано в твоем build.gradle.kts
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
 
-      - name: Build XrayCore AAR
+      - name: Build XrayCore AAR (Directly)
         run: |
-          # Устанавливаем gomobile для создания Android-библиотеки
           go install golang.org/x/mobile/cmd/gomobile@latest
           export PATH=$PATH:$(go env GOPATH)/bin
           gomobile init
           
-          # Создаем папку libs и собираем ядро напрямую
+          # Создаем папку для библиотеки
           mkdir -p app/libs
+          
+          # Собираем ядро напрямую в папку libs проекта
+          # Пакет io.github.saeeddev94.xray.core соответствует твоему namespace
           cd XrayCore
-          # Собираем AAR для основных архитектур
           gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
-
-      - name: Prepare Signing Key
-        run: |
-          # Декодируем ключ для подписи (если он добавлен в Secrets)
-          if [ -n "${{ secrets.KS_FILE }}" ]; then
-            echo "${{ secrets.KS_FILE }}" | base64 -d > /tmp/xray.jks
-          else
-            touch /tmp/xray.jks
-          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        env:
-          KS_PASSWORD: ${{ secrets.KS_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          # Передаем обязательные параметры abiId и abiTarget в Gradle
-          ./gradlew assembleRelease \
+          # Передаем обязательные параметры abiId и abiTarget, которые требует твой проект
+          ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a,armeabi-v7a" \
             --stacktrace
@@ -72,5 +60,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: xray-release-apks
-          path: app/build/outputs/apk/release/*.apk
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk
