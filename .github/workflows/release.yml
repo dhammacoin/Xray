@@ -2,9 +2,7 @@ name: Android Build
 
 on:
   push:
-    # Заменяем main на master, так как это ваша реальная ветка
     branches: [ "master" ]
-  # Добавляем возможность запускать вручную
   workflow_dispatch: 
 
 jobs:
@@ -13,6 +11,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive # Важно: подтягиваем зависимости, если они в подмодулях
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install Gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
 
       - name: set up JDK 17
         uses: actions/setup-java@v4
@@ -21,12 +31,19 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Build XrayCore (Go)
+        run: |
+          # В репозитории SaeedDev обычно есть папка XrayCore или скрипт buildGo.sh
+          # Если скрипт есть, запускаем его:
+          chmod +x buildGo.sh
+          ./buildGo.sh
+          # Либо, если скрипта нет, собираем напрямую:
+          # cd XrayCore && gomobile bind -v -androidapi 21 -target=android -javapkg=com.xray.core .
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        # Если проект SaeedDev94 использует Docker, 
-        # здесь лучше вызвать соответствующий скрипт (например, ./build-xray.sh)
         run: ./gradlew assembleDebug
 
       - name: Upload APK
