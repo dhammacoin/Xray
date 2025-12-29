@@ -8,30 +8,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      # 2. Set up Go
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23' 
 
+      # 3. Set up JDK 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      # 4. Setup Android NDK
       - name: Setup Android NDK
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
-          # Экспортируем пути для Gradle и системных вызовов
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
           echo "$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_PATH
 
+      # 5. Build XrayCore AAR
       - name: Build XrayCore AAR
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
@@ -40,27 +45,50 @@ jobs:
           
           mkdir -p app/libs
           cd XrayCore
-          # Используем явный пакет, чтобы импорт в Kotlin стал предсказуемым
-          gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
+          # Собираем библиотеку с указанием пакета для корректного импорта в Kotlin
+          gomobile bind -v -androidapi 26 -target=android \
+            -javapkg=io.github.saeeddev94.xray.core \
+            -o ../app/libs/XrayCore.aar .
+          
+          ls -l ../app/libs/XrayCore.aar
 
+      # 6. Patch settings.gradle.kts (Fix 403 Forbidden)
+      - name: Patch settings.gradle.kts
+        run: |
+          if [ -f settings.gradle.kts ]; then
+            sed -i 's/mavenCentral()/maven { url = uri("https:\/\/repo1.maven.org\/maven2\/") }/g' settings.gradle.kts
+          fi
+
+      # 7. Grant execute permission for gradlew
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # 8. Build with Gradle
       - name: Build with Gradle
         run: |
-          # Добавляем параллельную сборку и ограничение воркеров для стабильности в облаке
           ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a" \
             --no-daemon \
-            --parallel \
-            --max-workers=2 \
             --stacktrace \
-            --refresh-dependencies
+            --refresh-dependencies \
+            -Dorg.gradle.internal.http.socketTimeout=300000 \
+            -Dorg.gradle.internal.http.connectionTimeout=300000 \
+            -Dorg.gradle.internal.repository.max.retries=20 \
+            -Dorg.gradle.internal.repository.max.tenacity=20
 
+      # 9. Upload AAR Library (Добавлено: теперь выгружаем библиотеку отдельно)
+      - name: Upload XrayCore AAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-core-aar
+          path: app/libs/XrayCore.aar
+
+      # 10. Upload APK
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: xray-debug
+          name: xray-debug-apk
           path: app/build/outputs/apk/debug/*.apk
