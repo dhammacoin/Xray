@@ -27,9 +27,8 @@ jobs:
 
       - name: Setup Android NDK
         run: |
-          # Установка конкретной версии NDK (r28), указанной в твоем build.gradle.kts
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
-          # Настройка путей, чтобы Gradle и ndk-build работали корректно
+          # Экспортируем пути для Gradle и системных вызовов
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
           echo "$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_PATH
 
@@ -41,19 +40,15 @@ jobs:
           
           mkdir -p app/libs
           cd XrayCore
-          # Генерируем AAR с пакетом, который ожидает твой Kotlin-код
+          # Используем явный пакет, чтобы импорт в Kotlin стал предсказуемым
           gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
-          
-          # Проверка наличия файла
-          ls -l ../app/libs/XrayCore.aar
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
         run: |
-          # Используем твои параметры abiId и abiTarget
-          # Добавляем --parallel для ускорения
+          # Добавляем параллельную сборку и ограничение воркеров для стабильности в облаке
           ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a" \
