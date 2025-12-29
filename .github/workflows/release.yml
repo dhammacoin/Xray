@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          # Версия 1.23 исправляет ошибку "building_Go_requires_Go_1_22_6"
+          # Версия 1.23 точно подходит под требования проекта
           go-version: '1.23' 
 
       - name: set up JDK 17
@@ -31,18 +31,19 @@ jobs:
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          # gomobile init выполнится после обновления PATH на следующем шаге или через shell напрямую
-          
+
       - name: Setup Android NDK
-        uses: nndixon/setup-android-ndk@v1
-        with:
-          ndk-version: r25c # Стабильная версия для сборки Xray
+        # Используем стандартный способ установки через Android SDK Manager
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Build XrayCore (Go)
         run: |
+          # Обновляем PATH в текущей сессии
           export PATH=$PATH:$(go env GOPATH)/bin
           gomobile init
-          # Запускаем твой скрипт сборки ядра
+          # Запускаем скрипт сборки
           chmod +x buildGo.sh
           ./buildGo.sh
 
@@ -50,7 +51,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        # Добавляем флаг для игнорирования проблем с проверкой текста, если будут
+        # Добавляем --stacktrace для детальных логов при ошибках
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
