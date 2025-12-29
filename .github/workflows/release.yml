@@ -27,9 +27,10 @@ jobs:
 
       - name: Setup Android NDK
         run: |
-          # Устанавливаем NDK r28, как указано в твоем build.gradle.kts
+          # Устанавливаем NDK r28, как в твоем проекте
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_PATH
 
       - name: Build XrayCore AAR
         run: |
@@ -37,30 +38,23 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           gomobile init
           
-          # Создаем папку libs, если её нет
           mkdir -p app/libs
-          
-          # Собираем ядро. 
-          # Мы НЕ указываем -javapkg, чтобы gomobile создал стандартный импорт XrayCore,
-          # который ожидают твои файлы MainActivity.kt и другие.
           cd XrayCore
-          gomobile bind -v -androidapi 26 -target=android -o ../app/libs/XrayCore.aar .
-          
-          # Проверяем, что файл создался (для логов)
-          ls -l ../app/libs/
+          # ВАЖНО: Мы указываем javapkg, чтобы импорт в Kotlin работал
+          gomobile bind -v -androidapi 26 -target=android -javapkg=io.github.saeeddev94.xray.core -o ../app/libs/XrayCore.aar .
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build with Gradle
         run: |
-          # Собираем APK. 
-          # Передаем abiId и abiTarget (обязательно для твоего проекта).
-          # Добавляем --refresh-dependencies, чтобы Gradle увидел свежий XrayCore.aar
+          # Собираем APK с твоими параметрами abiId и abiTarget
           ./gradlew assembleDebug \
             -PabiId=0 \
             -PabiTarget="arm64-v8a" \
             --no-daemon \
+            --parallel \
+            --max-workers=2 \
             --stacktrace \
             --refresh-dependencies
 
@@ -68,5 +62,5 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: xray-debug-apk
+          name: xray-debug
           path: app/build/outputs/apk/debug/*.apk
